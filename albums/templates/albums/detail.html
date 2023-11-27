@@ -1,0 +1,250 @@
+{% extends "base/base.html" %}
+
+{% block style %}
+      <style>
+        .row-image {
+          cursor: pointer
+        }
+      </style>
+{% endblock style %}
+
+
+{% block content %}
+
+{% include "images/snippets/modal.html" %}
+{% include "images/snippets/delete.html" %}
+    <div class='row'>
+        <div class='col'>
+          <h4><a href='{% url "albums:list" %}'>Galeria</a></h4>
+          <h2>{{ object }}</h2>  
+        </div>
+    </div>
+
+    <div class='row mt-2'>
+      <div class='col'>
+        <form action='{% url "images:search" %}' id='image-search'>
+          <input type='text' class='form-control' name='q' placeholder='Inicia tu busqueda'/>
+        </form>
+      </div>
+    </div>
+
+    <div class='row'>
+        <div class='col mt-4'>
+          <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#newImage">
+            Nueva Imagen
+          </button>
+          <a href="{% url "images:download_many" %}" class="btn btn-success disabled" id='download-images'>
+            Descargar
+          </a>
+          <a href="{% url "images:delete_many" %}" class="btn btn-danger disabled" id='delete-images'>
+            Eliminar
+          </a>
+        </div>
+      </div>
+
+    <div class='row mt-2'>
+      <div class='col-8'>
+        <table class='table'>
+          <thead>
+            <tr>
+              <td>
+                <div class='form-check'>
+                  <input type='checkbox' class='form-check-input' id="check-all-images"/>
+                </div>
+              </td>
+              <th>Nombre</th>
+              <th>Fecha de creacion</th>
+              <th>Tamaño</th>
+            </tr>
+          </thead>
+          <tbody id='table-image'>
+
+              {% for image in images %}
+                {% include "images/snippets/image.html" %}
+              {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class='col-4'>
+        <img src='' alt='' width='300' height='300' id='image-preview'>
+      </div>
+    </div>
+{% endblock content %}
+
+{% block javascript %}
+  <script>
+    const imagePreview = document.getElementById('image-preview')
+    const imageDefault = 'https://cfimagesproject1.s3.us-east-2.amazonaws.com/codigo.jpg'
+
+    const checkAllImages = document.getElementById('check-all-images')
+
+    const downloadImages = document.getElementById('download-images')
+    const deleteImages = document.getElementById('delete-images')
+
+    const imageSearch = document.getElementById('image-search')
+
+    function selectRow(row) {
+      let imageId = row.getAttribute('image-id')
+        let input = document.getElementById('image-preview-' + imageId)
+        imagePreview.src = input.value
+
+        document.querySelectorAll('.table-active').forEach(element => {
+          element.classList.remove('table-active')
+        })
+
+        row.classList.add('table-active')
+    }
+
+    function setDefaultImage() {
+      let rows = document.getElementsByTagName('tr')
+      if(rows.length >= 2){
+        selectRow(rows[1])
+      } else {
+        imagePreview.src = imageDefault
+      }
+    }
+
+    function checkInputs(){
+
+      let images = document.querySelectorAll('input.check-images[type="checkbox"]:checked')
+
+      if(images.length >= 2){
+        downloadImages.classList.remove('disabled')
+        deleteImages.classList.remove('disabled')
+      } else {
+        downloadImages.classList.add('disabled')
+        deleteImages.classList.add('disabled')
+      }
+    }
+
+    function getImagesSelected(){
+      let ids = []
+      let images = document.querySelectorAll('input.check-images[type="checkbox"]:checked')
+
+      for(let i=0; i < images.length; i++) {
+        let imageId = images[i].getAttribute('image-id')
+        ids.push(imageId)
+      }
+      
+      return ids
+    }
+
+    function registerEvents(){
+
+      document.querySelectorAll('.row-image').forEach(element => {
+        element.addEventListener('click', function(e){
+          selectRow(this)
+        })
+      })
+
+      document.querySelectorAll('.image-edit').forEach(element => {
+        element.addEventListener('click', function(event){
+            event.preventDefault();
+
+            let imageId = this.getAttribute('image-id');
+            let input = document.getElementById('image-input-name-' + imageId);
+
+            let div = document.getElementById('image-name-' + imageId);
+
+            div.style.display = 'none';
+            input.setAttribute('type', 'text');
+        });
+      })
+
+      document.querySelectorAll('.image-form').forEach(element => {
+        element.addEventListener('submit', function(e){
+          e.preventDefault()
+          fetch(this.action, {
+            body: new FormData(this),
+            method: 'POST'
+          })
+          .then(response => response.json())
+          .then(data => {
+
+            let imageId = this.getAttribute('image-id')
+
+            let input = document.getElementById('image-input-name-' + imageId)
+            input.value = data.name
+            input.setAttribute('type', 'hidden')
+
+            let div = document.getElementById('image-name-' + imageId)
+            div.innetHTML = data.name
+            div.style.display = 'block'
+
+            let preview = document.getElementById('image-preview-' + imageId)
+            preview.value = data.url
+            
+          })
+        })
+      })
+
+      document.querySelectorAll('.check-images').forEach(element => {
+        element.addEventListener('change', function(e){
+          checkInputs()
+        })
+      })
+    
+    }
+
+    $('#deleteModal').on('show.bs.modal', function (event) {
+        let button = $(event.relatedTarget) 
+        let item = button[0]
+        let modal = $(this)
+        fetch(item.href)
+        .then(response => response.json())
+        .then(function(data){
+          modal.find('#strong-name').text(data.name)
+          modal.find('#delete-modal-button')[0].href = data.delete_url
+        })
+    })
+
+    checkAllImages.addEventListener('change', function(e){
+      document.querySelectorAll('.check-images').forEach(element => {
+        element.checked = this.checked
+      })
+      checkInputs()
+    })
+
+    deleteImages.addEventListener('click', function(e){
+      e.preventDefault()
+      let ids = getImagesSelected()
+
+      fetch(this.href, {
+        method: 'POST',
+        body: JSON.stringify({'ids': ids})
+      })
+      .then(response => response.json())
+      .then(function(data){
+        for(let i=0; i < data.ids.length; i++){
+          let imageId = data.ids[i]
+          document.getElementById('image-' + imageId).remove()
+        }
+        setDefaultImage()
+      })
+
+    })
+
+    downloadImages.addEventListener('click', function(e){
+      e.preventDefault()
+      let ids = getImagesSelected()
+
+      window.location.href = this.href + '?ids=' + ids
+      
+    })
+
+    imageSearch.addEventListener('submit', function(e){
+      e.preventDefault()
+      fetch(this.action + '?q=' + this.q.value)
+      .then(response => response.json())
+      .then(data => {
+        let table = document.getElementById('table-image')
+        table.innerHTML = data.images.toString().replaceAll(',', '')
+        registerEvents()
+        setDefaultImage()
+      })
+    })
+
+    registerEvents()
+    setDefaultImage()
+  </script>
+{% endblock javascript %}
